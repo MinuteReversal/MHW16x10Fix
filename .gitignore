@@ -1,0 +1,6 @@
+/build/
+/build-*/
+/.vs/
+*.log
+*.user
+*.suo
