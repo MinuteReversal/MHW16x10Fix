@@ -13,7 +13,7 @@
 namespace mhw {
 
 inline constexpr std::wstring_view kName = L"MHW16x10Fix";
-inline constexpr std::wstring_view kVersion = L"0.4.4-dx11-texture-trace";
+inline constexpr std::wstring_view kVersion = L"0.5.5-aspect-constant";
 
 std::filesystem::path module_directory(HMODULE module);
 

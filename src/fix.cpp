@@ -65,7 +65,7 @@ void initialize_fix(HMODULE self) {
                 L"DX12 detected; no hooks or memory patches were installed");
             return;
         }
-        if (!install_d3d11_diagnostics(log)) {
+        if (!install_d3d11_diagnostics(log, config)) {
             log.write(L"DX11 diagnostics were not installed");
             return;
         }

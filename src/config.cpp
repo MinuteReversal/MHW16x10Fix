@@ -64,6 +64,15 @@ Config Config::load(const std::filesystem::path& path) {
     result.fix_hud = read_bool(path, L"Fix", L"FixHUD", result.fix_hud);
     result.fix_cutscenes =
         read_bool(path, L"Fix", L"FixCutscenes", result.fix_cutscenes);
+    result.experimental_expand_720p =
+        read_bool(path, L"Fix", L"ExperimentalExpand720p",
+                  result.experimental_expand_720p);
+    result.experimental_patch_active_rect =
+        read_bool(path, L"Fix", L"ExperimentalPatchActiveRect",
+                  result.experimental_patch_active_rect);
+    result.experimental_patch_aspect_constant =
+        read_bool(path, L"Fix", L"ExperimentalPatchAspectConstant",
+                  result.experimental_patch_aspect_constant);
     result.enable_log =
         read_bool(path, L"Debug", L"EnableLog", result.enable_log);
 
