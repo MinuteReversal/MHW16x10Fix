@@ -48,9 +48,16 @@ On SteamOS, use:
 WINEDLLOVERRIDES="dinput8.dll=n,b" %command%
 ```
 
-The game directory can contain only one file named `dinput8.dll`. Another mod
-using the same proxy filename will conflict unless a chain-loading solution is
-added.
+The game directory can contain only one file named `dinput8.dll`. To use
+another proxy mod at the same time:
+
+1. Keep this project's DLL named `dinput8.dll`.
+2. Rename the other mod's proxy DLL to `dinput8_chain.dll`.
+3. Put both DLLs beside `MonsterHunterWorld.exe`.
+4. Set `ChainLoad=dinput8_chain.dll` in `mhw_16x10.ini`.
+
+The configured path may also be absolute. Relative paths are resolved from the
+game directory.
 
 ## Configuration
 
@@ -62,6 +69,9 @@ Width=1280
 Height=800
 RemoveLetterbox=true
 
+[Loader]
+ChainLoad=
+
 [Debug]
 EnableLog=true
 ```
@@ -69,9 +79,19 @@ EnableLog=true
 With auto-detection enabled, the configured width and height are fallbacks.
 Logs are written to `MHW16x10Fix.log`.
 
+When chain loading is configured, the downstream DLL is loaded before the
+first DirectInput call is completed. If it exports `DirectInput8Create`, the
+call is forwarded to it; otherwise the DLL still receives its normal
+`DllMain` initialization and DirectInput calls continue to the Windows system
+DLL. The log records which case occurred. Self-loading is rejected.
+
 ## Limitations
 
 - DX12 is not supported.
 - A small number of UI dialogs may retain 16:9-oriented positioning.
 - Only the listed executable build is supported; the setter bytes are checked
   at runtime and an unknown build fails closed.
+- Chain loading solves the common single-proxy filename conflict. It cannot
+  guarantee compatibility between mods that hook or patch the same game or
+  graphics functions, and a downstream proxy with its own hard-coded filename
+  assumptions may still require that mod's documented loader arrangement.

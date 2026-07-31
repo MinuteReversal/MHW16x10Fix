@@ -1,5 +1,6 @@
 #include "fix.hpp"
 
+#include "dinput8_proxy.hpp"
 #include "native_aspect_fix.hpp"
 #include "log.hpp"
 
@@ -47,6 +48,8 @@ void initialize_fix(HMODULE self) {
             log.write(L"Unexpected host process; no patches were applied");
             return;
         }
+        initialize_dinput8_proxy(
+            self, directory, config.chain_load, log);
         if (!config.enabled) {
             log.write(L"Disabled in configuration");
             return;

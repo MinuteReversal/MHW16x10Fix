@@ -5,6 +5,45 @@
 Remove the 16:9 letterboxing from Monster Hunter: World at 1280x800 on
 Steam Deck, while keeping the game stable under Proton.
 
+## Latest handoff (2026-07-31 — chain loader)
+
+### Immediate state for the next session
+
+- The chain-loader implementation, documentation, build, isolated forwarding
+  test, and direct Windows installation are complete.
+- The game was not running during the final build and installation.
+- The installed INI currently has an empty `ChainLoad`, so the proven native
+  aspect fix runs exactly as before until the user opts into another proxy.
+- To test another proxy mod, rename that mod's `dinput8.dll` to
+  `dinput8_chain.dll`, place it beside this project's `dinput8.dll`, and set
+  `[Loader] ChainLoad=dinput8_chain.dll`.
+- The next useful validation is one Windows launch with a real chained mod,
+  followed by checking `MHW16x10Fix.log`; then repeat on Steam Deck/Proton.
+- Current source changes are intentionally uncommitted. Do not discard them.
+
+### Implementation
+
+- `0.10.0-chain-loader` adds optional downstream proxy loading through:
+  `[Loader] ChainLoad=dinput8_chain.dll`.
+- Relative paths resolve beside `MonsterHunterWorld.exe`; absolute paths are
+  accepted and self-reference is rejected.
+- The downstream DLL is loaded on the first of either proxy initialization or
+  `DirectInput8Create`, preventing an early DirectInput call from bypassing
+  the chain.
+- If the downstream DLL exports `DirectInput8Create`, calls are forwarded to
+  it. If it does not, its `DllMain` hooks still initialize and DirectInput
+  continues through the Windows system DLL.
+- An isolated stub test returned the downstream sentinel HRESULT
+  `0x12345678`, confirming actual call forwarding through the chain.
+- The build was directly installed while the game was not running. Installed
+  DLL SHA-256:
+  `3531E1894CED2B8B5364B8F652A0213FA6A35656D95650552C4990E575E014D3`.
+- Installed default INI SHA-256:
+  `B2CA35999763E56818FD2DB1E73A3477EC41BAD6907F26597A378DBC07E78E05`.
+- This resolves the single-`dinput8.dll` filename conflict, but does not make
+  two mods compatible when they patch or hook the same underlying functions.
+- Never build or replace the DLL while `MonsterHunterWorld.exe` is running.
+
 ## Latest handoff (2026-07-31 — lean native-aspect build)
 
 ### Confirmed result

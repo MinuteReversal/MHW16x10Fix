@@ -11,6 +11,7 @@ struct Config {
     std::uint32_t height{800};
     bool remove_letterbox{true};
     bool enable_log{true};
+    std::filesystem::path chain_load{};
     bool resolution_detected{false};
     bool game_dx12{false};
 

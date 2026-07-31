@@ -1,6 +1,7 @@
 #include "config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cwctype>
 #include <cstdlib>
 
@@ -41,6 +42,17 @@ std::uint32_t read_uint(const std::filesystem::path& file,
     return value > 0 ? static_cast<std::uint32_t>(value) : fallback;
 }
 
+std::filesystem::path read_path(const std::filesystem::path& file,
+                                const wchar_t* section,
+                                const wchar_t* key) {
+    std::array<wchar_t, 1024> value{};
+    const auto length = GetPrivateProfileStringW(
+        section, key, L"", value.data(),
+        static_cast<DWORD>(value.size()), file.c_str());
+    return std::filesystem::path(
+        std::wstring_view(value.data(), length));
+}
+
 }  // namespace
 
 float Config::aspect() const noexcept {
@@ -59,6 +71,7 @@ Config Config::load(const std::filesystem::path& path) {
         read_bool(path, L"Fix", L"RemoveLetterbox", result.remove_letterbox);
     result.enable_log =
         read_bool(path, L"Debug", L"EnableLog", result.enable_log);
+    result.chain_load = read_path(path, L"Loader", L"ChainLoad");
 
     if (result.auto_detect_aspect) {
         const auto graphics_file = path.parent_path() / L"graphics_option.ini";
