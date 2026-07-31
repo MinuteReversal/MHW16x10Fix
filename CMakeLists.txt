@@ -28,7 +28,7 @@ target_compile_definitions(MHW16x10Fix PRIVATE
 target_compile_options(MHW16x10Fix PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /EHsc>
 )
-target_link_libraries(MHW16x10Fix PRIVATE d3d11 dxgi)
+target_link_libraries(MHW16x10Fix PRIVATE d3d11 d3d12 dxgi)
 set_target_properties(MHW16x10Fix PROPERTIES
     OUTPUT_NAME dinput8
     PREFIX ""

@@ -5,6 +5,63 @@
 Remove the 16:9 letterboxing from Monster Hunter: World at 1280x800 on
 Steam Deck, while keeping the game stable under Proton.
 
+## Latest handoff (2026-08-01 — DX12 preview)
+
+### Immediate state
+
+- `0.11.2-dx12-hidden-window` adds a DX12 path and is built and directly
+  installed after the dummy-window fix.
+- Windows DX12 runtime validation succeeded. The user exited the game after
+  the successful test, so building and packaging are currently safe.
+- The game was not running during the build and installation.
+- Installed/source DLL SHA-256:
+  `D92A1F80049808E29153A7DAC3760B6A6D986A4D9785B0CF6BFBAE1927F9C2EB`.
+- The installed INI was preserved. The current game setting remains
+  `DirectX12Enable=Off`; the user must enable DX12 before validating this path.
+- The implementation and documentation changes are intentionally uncommitted.
+
+### DX12 implementation
+
+- When DX12 is configured, the proxy hooks the shared DXGI factory entries for
+  `CreateSwapChain` and `CreateSwapChainForHwnd`.
+- Once the game creates its real swap chain, the proxy hooks that swap chain's
+  `Present` entry and invokes the same proven engine-native aspect mode-zero
+  request from the render thread.
+- The first Windows run showed that the game can create its DX12 swap chain
+  before the initialization worker installs the factory hooks. No capture or
+  mode-zero request occurred, although the game launched normally and Windows
+  recorded no application crash. A matching dummy D3D12 device, command queue,
+  and swap chain are now created as a timing-independent fallback so their
+  shared DX12 Present vtable is hooked even after the real swap chain exists.
+- The second Windows run reached dummy swap-chain creation but failed with
+  `0x80070005` because the Desktop window cannot be used as the target of this
+  DX12 flip-model swap chain. The probe now creates an unshown, process-owned
+  `STATIC` popup window and destroys it after the vtable hook is installed.
+- The setter RVA, render-manager global, byte verification, state fields, and
+  result logging are unchanged from the validated DX11 implementation.
+- DX11 continues to use its existing dummy-device shared Present-vtable hook.
+- The DLL export table was verified to contain only `DirectInput8Create`.
+
+### Required DX12 test
+
+- The Windows test confirmed `MHW16x10Fix.log` contains:
+  - `Version 0.11.2-dx12-hidden-window`;
+  - `Graphics API: DX12`;
+  - both DX12 swap-chain capture hooks reported as hooked;
+  - `DX12 dummy swap chain Present hook: installed`;
+  - `Native aspect mode requested`;
+  - `Native aspect mode applied: mode=0, content=1280x800, output=1280x800`.
+- Visually confirm there are no bars or stretched HUD elements, then test
+  stability afterward on Steam Deck/Proton.
+- The user visually confirmed full-height native 16:10 content. On the 16:9
+  Windows test display, the radar and task-board wheel appear horizontally
+  wide, which is the expected result of displaying genuine 16:10 content on a
+  16:9 panel. They should be round on the Steam Deck's native 1280x800 panel.
+- If no real swap-chain capture line appears, do not call the setter from the
+  initialization worker thread. Extend capture to the factory method actually
+  used by the game or create a matching dummy DX12 swap chain.
+- Never build or replace the DLL while `MonsterHunterWorld.exe` is running.
+
 ## Latest handoff (2026-07-31 — chain loader)
 
 ### Immediate state for the next session
@@ -73,7 +130,7 @@ Steam Deck, while keeping the game stable under Proton.
   - the official aspect-mode-zero request and result log.
 - Obsolete camera tracing, projection upload tracing, resource expansion,
   viewport/scissor rewriting, active-rectangle scans, pattern helpers, and
-  LGPL-derived runtime experiments were removed.
+  abandoned runtime experiments were removed.
 - Source changes reduce the project by roughly 2,300 lines. The DLL decreased
   from 286,208 bytes to 235,008 bytes.
 - The DLL export table was verified to contain only `DirectInput8Create`.
@@ -822,10 +879,10 @@ Windows game directory:
 - Do not blindly rewrite every 1280x720 viewport to 1280x800. The bound
   textures are still 720 pixels high, so this can clip, corrupt rendering, or
   write outside the intended render area.
-- Do not return to the old broad writable-memory scan with fixed derived
-  offsets. Version `0.3.1-dx11-experimental` found an old render structure and
-  wrote offsets derived from Lazy Aspect Fix (`+0x23D90` and `+0x78`), which
-  caused a crash on this game build.
+- Do not return to the old broad writable-memory scan with fixed assumed
+  offsets. Version `0.3.1-dx11-experimental` found an unrelated render
+  structure and wrote `+0x23D90` and `+0x78`, which caused a crash on this
+  game build.
 - The crashing DLL was preserved, disabled, as:
   `<game directory>\dinput8.dll.0.3.1-crash-disabled`.
 - Do not compile or replace the DLL while the game is running. It causes
@@ -836,7 +893,8 @@ Windows game directory:
 
 ## Recommended next step
 
-Continue on the REFramework-style graphics API hook route:
+Historical graphics API diagnostic route (superseded by the native
+aspect-mode solution):
 
 1. Hook the real `ID3D11Device::CreateTexture2D`.
 2. Initially make this diagnostic-only.
@@ -869,13 +927,14 @@ device.
 - The user reports game state explicitly ("started", "entered scene",
   "exited"). Wait for an explicit exit before compiling/deploying.
 
-## Reference work and licensing
+## Development provenance
 
-- Architectural reference:
-  `https://github.com/praydog/REFramework`
-- Lazy Aspect Fix source was cloned for study at:
-  `C:\Users\zy336\Documents\Codex\2026-07-30\new-chat\work\lazy-aspect-fix`
-- Lazy Aspect Fix is LGPLv3. The project already includes
-  `THIRD_PARTY_NOTICES.md` and `LICENSES\LGPL-3.0.txt`.
-- REFramework supports RE Engine titles rather than MHW's MT Framework, so use
-  its hooking architecture as guidance, not its game-specific offsets.
+- This implementation is original work developed through iterative runtime
+  observation, disassembly, controlled experiments, and validation against
+  Monster Hunter: World 15.23.00.
+- REFramework (`https://github.com/praydog/REFramework`) was consulted only as
+  a high-level architectural reference for graphics API hooking. No
+  REFramework source or game-specific implementation is included here.
+- REFramework targets RE Engine titles rather than Monster Hunter: World's MT
+  Framework; this project's offsets and native aspect-mode solution were
+  independently identified and validated.

@@ -4,7 +4,9 @@
 #include "log.hpp"
 
 #include <d3d11.h>
+#include <d3d12.h>
 #include <dxgi.h>
+#include <dxgi1_2.h>
 
 #include <atomic>
 #include <cstdint>
@@ -14,6 +16,11 @@ namespace mhw {
 namespace {
 
 using PresentFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
+using CreateSwapChainFn = HRESULT(STDMETHODCALLTYPE*)(
+    IDXGIFactory*, IUnknown*, DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**);
+using CreateSwapChainForHwndFn = HRESULT(STDMETHODCALLTYPE*)(
+    IDXGIFactory2*, IUnknown*, HWND, const DXGI_SWAP_CHAIN_DESC1*,
+    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC*, IDXGIOutput*, IDXGISwapChain1**);
 using SetAspectModeFn = void (*)(void*, std::int32_t);
 
 constexpr std::uintptr_t kRenderManagerGlobalRva = 0x51C4480;
@@ -25,8 +32,11 @@ constexpr std::uintptr_t kContentHeightOffset = 0x19C;
 constexpr std::uintptr_t kOutputDimensionsOffset = 0x1F448;
 
 PresentFn g_original_present{};
+CreateSwapChainFn g_original_create_swapchain{};
+CreateSwapChainForHwndFn g_original_create_swapchain_for_hwnd{};
 std::atomic<bool> g_request_attempted{false};
 std::atomic<bool> g_result_logged{false};
+std::atomic<bool> g_present_hook_installed{false};
 bool g_remove_letterbox{};
 
 bool replace_vtable_entry(void** entry, void* replacement, void** original) {
@@ -156,10 +166,150 @@ HRESULT STDMETHODCALLTYPE present_hook(IDXGISwapChain* swapchain,
     return g_original_present(swapchain, sync_interval, flags);
 }
 
+bool hook_swapchain_present(IDXGISwapChain* swapchain) {
+    if (!swapchain) {
+        return false;
+    }
+    if (g_present_hook_installed.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    auto** vtable = *reinterpret_cast<void***>(swapchain);
+    void* original{};
+    if (!replace_vtable_entry(&vtable[8], reinterpret_cast<void*>(&present_hook),
+                              &original)) {
+        return false;
+    }
+    g_original_present = reinterpret_cast<PresentFn>(original);
+    g_present_hook_installed.store(true, std::memory_order_release);
+    return true;
+}
+
+HRESULT STDMETHODCALLTYPE create_swapchain_hook(
+    IDXGIFactory* factory, IUnknown* device,
+    DXGI_SWAP_CHAIN_DESC* description, IDXGISwapChain** swapchain) {
+    const auto result = g_original_create_swapchain(
+        factory, device, description, swapchain);
+    if (SUCCEEDED(result) && swapchain && *swapchain) {
+        const auto installed = hook_swapchain_present(*swapchain);
+        Logger::instance().write(
+            L"DX12 swap chain captured through CreateSwapChain; Present hook: {}",
+            installed ? L"installed" : L"failed");
+    }
+    return result;
+}
+
+HRESULT STDMETHODCALLTYPE create_swapchain_for_hwnd_hook(
+    IDXGIFactory2* factory, IUnknown* device, HWND window,
+    const DXGI_SWAP_CHAIN_DESC1* description,
+    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen,
+    IDXGIOutput* output, IDXGISwapChain1** swapchain) {
+    const auto result = g_original_create_swapchain_for_hwnd(
+        factory, device, window, description, fullscreen, output, swapchain);
+    if (SUCCEEDED(result) && swapchain && *swapchain) {
+        const auto installed = hook_swapchain_present(*swapchain);
+        Logger::instance().write(
+            L"DX12 swap chain captured through CreateSwapChainForHwnd; Present hook: {}",
+            installed ? L"installed" : L"failed");
+    }
+    return result;
+}
+
+bool install_dx12_swapchain_capture(Logger& log) {
+    IDXGIFactory2* factory{};
+    const auto result = CreateDXGIFactory1(
+        __uuidof(IDXGIFactory2), reinterpret_cast<void**>(&factory));
+    if (FAILED(result) || !factory) {
+        log.write(L"DX12 swap-chain capture failed: CreateDXGIFactory1 "
+                  L"returned 0x{:08X}", static_cast<unsigned>(result));
+        return false;
+    }
+
+    auto** vtable = *reinterpret_cast<void***>(factory);
+    void* original_create{};
+    void* original_create_for_hwnd{};
+    const auto legacy_installed = replace_vtable_entry(
+        &vtable[10], reinterpret_cast<void*>(&create_swapchain_hook),
+        &original_create);
+    if (legacy_installed) {
+        g_original_create_swapchain =
+            reinterpret_cast<CreateSwapChainFn>(original_create);
+    }
+    const auto hwnd_installed = replace_vtable_entry(
+        &vtable[15], reinterpret_cast<void*>(&create_swapchain_for_hwnd_hook),
+        &original_create_for_hwnd);
+    if (hwnd_installed) {
+        g_original_create_swapchain_for_hwnd =
+            reinterpret_cast<CreateSwapChainForHwndFn>(
+                original_create_for_hwnd);
+    }
+    log.write(L"DX12 swap-chain capture: CreateSwapChain={}, "
+              L"CreateSwapChainForHwnd={}",
+              legacy_installed ? L"hooked" : L"failed",
+              hwnd_installed ? L"hooked" : L"failed");
+
+    ID3D12Device* device{};
+    ID3D12CommandQueue* queue{};
+    IDXGISwapChain* swapchain{};
+    const auto dummy_window = CreateWindowExW(
+        0, L"STATIC", L"MHW16x10Fix DX12 probe", WS_POPUP,
+        0, 0, 2, 2, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    auto dummy_result = D3D12CreateDevice(
+        nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
+    if (!dummy_window) {
+        dummy_result = HRESULT_FROM_WIN32(GetLastError());
+    }
+    if (SUCCEEDED(dummy_result) && device) {
+        D3D12_COMMAND_QUEUE_DESC queue_description{};
+        queue_description.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        dummy_result = device->CreateCommandQueue(
+            &queue_description, IID_PPV_ARGS(&queue));
+    }
+    if (SUCCEEDED(dummy_result) && queue && legacy_installed) {
+        DXGI_SWAP_CHAIN_DESC description{};
+        description.BufferDesc.Width = 2;
+        description.BufferDesc.Height = 2;
+        description.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        description.SampleDesc.Count = 1;
+        description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        description.BufferCount = 2;
+        description.OutputWindow = dummy_window;
+        description.Windowed = TRUE;
+        description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        dummy_result = factory->CreateSwapChain(
+            queue, &description, &swapchain);
+    }
+
+    const auto dummy_hooked =
+        SUCCEEDED(dummy_result) && swapchain &&
+        g_present_hook_installed.load(std::memory_order_acquire);
+    log.write(L"DX12 dummy swap chain Present hook: {} (result=0x{:08X})",
+              dummy_hooked ? L"installed" : L"failed",
+              static_cast<unsigned>(dummy_result));
+    if (swapchain) {
+        swapchain->Release();
+    }
+    if (queue) {
+        queue->Release();
+    }
+    if (device) {
+        device->Release();
+    }
+    if (dummy_window) {
+        DestroyWindow(dummy_window);
+    }
+    factory->Release();
+    return dummy_hooked;
+}
+
 }  // namespace
 
 bool install_native_aspect_fix(Logger& log, const Config& config) {
     g_remove_letterbox = config.remove_letterbox;
+
+    if (config.game_dx12) {
+        return install_dx12_swapchain_capture(log);
+    }
 
     DXGI_SWAP_CHAIN_DESC description{};
     description.BufferDesc.Width = 2;
@@ -197,10 +347,7 @@ bool install_native_aspect_fix(Logger& log, const Config& config) {
         return false;
     }
 
-    auto** vtable = *reinterpret_cast<void***>(swapchain);
-    const auto installed = replace_vtable_entry(
-        &vtable[8], reinterpret_cast<void*>(&present_hook),
-        reinterpret_cast<void**>(&g_original_present));
+    const auto installed = hook_swapchain_present(swapchain);
     if (context) {
         context->Release();
     }

@@ -61,13 +61,9 @@ void initialize_fix(HMODULE self) {
 
         log.write(L"Graphics API: {}",
                   config.game_dx12 ? L"DX12" : L"DX11");
-        if (config.game_dx12) {
-            log.write(L"DX12 detected; the native-aspect fix supports DX11 "
-                      L"only");
-            return;
-        }
         if (!install_native_aspect_fix(log, config)) {
-            log.write(L"DX11 native-aspect hook was not installed");
+            log.write(L"{} native-aspect hook was not installed",
+                      config.game_dx12 ? L"DX12" : L"DX11");
             return;
         }
         log.write(L"Native-aspect initialization completed");

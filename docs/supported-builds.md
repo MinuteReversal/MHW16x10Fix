@@ -50,8 +50,9 @@ from 1280x720 to 1280x800 while the output remains 1280x800.
 - `Aspect Ratio=On` maps to 21:9; it is a Boolean mode flag, not a numeric
   aspect-ratio value, so `1.6` cannot be supplied through the INI.
 
-DX12 remains unsupported. The fix reads this setting only to fail closed
-before installing its DX11 Present hook.
+DX12 preview support captures the game's real DXGI swap chain and invokes the
+same engine-native mode-zero setter from its Present thread. This path still
+requires Windows and Steam Deck runtime validation.
 
 ### Steam Deck 1280x800 confirmation
 

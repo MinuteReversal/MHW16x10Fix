@@ -1,12 +1,13 @@
 # MHW16x10Fix
 
-Removes the forced 16:9 letterbox from Monster Hunter: World / Iceborne when
-running in DX11, including the Steam Deck's native 1280x800 mode.
+Removes the forced 16:9 letterbox from Monster Hunter: World / Iceborne,
+including the Steam Deck's native 1280x800 mode. Both DX11 and DX12 are
+supported.
 
 ## How it works
 
 The game normally requests render aspect mode `1`, which constrains content to
-16:9. This proxy waits for the first DX11 Present and calls the game's own
+16:9. This proxy waits for the first graphics Present and calls the game's own
 aspect-mode setter with mode `0` (no aspect crop). The engine then rebuilds the
 content area at the actual output size.
 
@@ -19,12 +20,17 @@ textures manually, or globally rewrite viewports/scissors.
 - Steam executable SHA-256:
   `C2EBBBD2C49F216D484E31A5219BED419EB1E5E7D206D02CBA040A3AB79D90EA`
 - DX11
+- DX12
 - 1280x800
 - Windows and Steam Deck
 - Steam Deck play session exceeding one hour without a crash
 
 Other 16:10 and ultrawide resolutions may work through the same native mode,
 but have not received the same validation.
+
+DX12 uses the same native engine setter and has been visually and internally
+validated on Windows at 1280x800. Extended DX12 stability testing on Steam
+Deck remains pending.
 
 ## Build
 
@@ -87,7 +93,7 @@ DLL. The log records which case occurred. Self-loading is rejected.
 
 ## Limitations
 
-- DX12 is not supported.
+- Extended DX12 stability testing on Steam Deck is still pending.
 - A small number of UI dialogs may retain 16:9-oriented positioning.
 - Only the listed executable build is supported; the setter bytes are checked
   at runtime and an unknown build fails closed.
@@ -95,3 +101,15 @@ DLL. The log records which case occurred. Self-loading is rejected.
   guarantee compatibility between mods that hook or patch the same game or
   graphics functions, and a downstream proxy with its own hard-coded filename
   assumptions may still require that mod's documented loader arrangement.
+
+## Source and license
+
+Source code: <https://github.com/MinuteReversal/MHW16x10Fix>
+
+MHW16x10Fix is original work developed through runtime analysis and controlled
+testing. REFramework was consulted only as a high-level architectural reference
+for graphics API hooking; no REFramework source is included.
+
+Licensed under the [MIT License](LICENSE). You may use, modify, and redistribute
+the project, including commercially, provided the copyright and license notice
+are retained.
