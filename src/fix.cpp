@@ -1,6 +1,6 @@
 #include "fix.hpp"
 
-#include "d3d11_diagnostics.hpp"
+#include "native_aspect_fix.hpp"
 #include "log.hpp"
 
 #include <array>
@@ -56,20 +56,18 @@ void initialize_fix(HMODULE self) {
                   config.width, config.height);
         log.write(L"Aspect ratio: {:.6f}", config.aspect());
 
-        log.write(L"Graphics API: {}; DLSS: {}; aspect preset: {}",
-                  config.game_dx12 ? L"DX12" : L"DX11",
-                  config.game_dlss ? L"On" : L"Off",
-                  config.game_ultrawide_mode ? L"21:9" : L"16:9");
+        log.write(L"Graphics API: {}",
+                  config.game_dx12 ? L"DX12" : L"DX11");
         if (config.game_dx12) {
-            log.write(
-                L"DX12 detected; no hooks or memory patches were installed");
+            log.write(L"DX12 detected; the native-aspect fix supports DX11 "
+                      L"only");
             return;
         }
-        if (!install_d3d11_diagnostics(log, config)) {
-            log.write(L"DX11 diagnostics were not installed");
+        if (!install_native_aspect_fix(log, config)) {
+            log.write(L"DX11 native-aspect hook was not installed");
             return;
         }
-        log.write(L"Diagnostic initialization completed; memory writes disabled");
+        log.write(L"Native-aspect initialization completed");
     } catch (...) {
         const auto fallback = directory / L"MHW16x10Fix.error.log";
         if (const auto file = CreateFileW(

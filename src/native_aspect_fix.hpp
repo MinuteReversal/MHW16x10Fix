@@ -5,6 +5,6 @@ namespace mhw {
 class Logger;
 struct Config;
 
-bool install_d3d11_diagnostics(Logger& log, const Config& config);
+bool install_native_aspect_fix(Logger& log, const Config& config);
 
 }  // namespace mhw

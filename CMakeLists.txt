@@ -11,12 +11,11 @@ endif()
 
 add_library(MHW16x10Fix SHARED
     src/config.cpp
-    src/d3d11_diagnostics.cpp
     src/dinput8_proxy.cpp
     src/dllmain.cpp
     src/fix.cpp
     src/log.cpp
-    src/pattern.cpp
+    src/native_aspect_fix.cpp
 )
 
 target_compile_features(MHW16x10Fix PRIVATE cxx_std_20)

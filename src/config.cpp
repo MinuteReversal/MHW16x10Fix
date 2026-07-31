@@ -55,27 +55,8 @@ Config Config::load(const std::filesystem::path& path) {
         path, L"Fix", L"AutoDetectAspect", result.auto_detect_aspect);
     result.width = read_uint(path, L"Fix", L"Width", result.width);
     result.height = read_uint(path, L"Fix", L"Height", result.height);
-    result.fix_viewport =
-        read_bool(path, L"Fix", L"FixViewport", result.fix_viewport);
-    result.fix_projection =
-        read_bool(path, L"Fix", L"FixProjection", result.fix_projection);
     result.remove_letterbox =
         read_bool(path, L"Fix", L"RemoveLetterbox", result.remove_letterbox);
-    result.fix_hud = read_bool(path, L"Fix", L"FixHUD", result.fix_hud);
-    result.fix_cutscenes =
-        read_bool(path, L"Fix", L"FixCutscenes", result.fix_cutscenes);
-    result.experimental_expand_720p =
-        read_bool(path, L"Fix", L"ExperimentalExpand720p",
-                  result.experimental_expand_720p);
-    result.experimental_expand_scene_resources =
-        read_bool(path, L"Fix", L"ExperimentalExpandSceneResources",
-                  result.experimental_expand_scene_resources);
-    result.experimental_patch_active_rect =
-        read_bool(path, L"Fix", L"ExperimentalPatchActiveRect",
-                  result.experimental_patch_active_rect);
-    result.experimental_patch_aspect_constant =
-        read_bool(path, L"Fix", L"ExperimentalPatchAspectConstant",
-                  result.experimental_patch_aspect_constant);
     result.enable_log =
         read_bool(path, L"Debug", L"EnableLog", result.enable_log);
 
@@ -98,12 +79,8 @@ Config Config::load(const std::filesystem::path& path) {
             result.height = static_cast<std::uint32_t>(height);
             result.resolution_detected = true;
         }
-        result.game_ultrawide_mode = read_bool(
-            graphics_file, L"GraphicsOption", L"Aspect Ratio", false);
         result.game_dx12 = read_bool(
             graphics_file, L"GraphicsOption", L"DirectX12Enable", false);
-        result.game_dlss = read_bool(
-            graphics_file, L"GraphicsOption", L"NVIDIA DLSS", false);
     }
     return result;
 }

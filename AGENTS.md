@@ -5,6 +5,50 @@
 Remove the 16:9 letterboxing from Monster Hunter: World at 1280x800 on
 Steam Deck, while keeping the game stable under Proton.
 
+## Latest handoff (2026-07-31 — lean native-aspect build)
+
+### Confirmed result
+
+- The official render-manager mode-zero fix was validated on Steam Deck for
+  more than one continuous hour without a crash.
+- At 1280x800 it produces native `1280x800` content and output, with no
+  letterbox, no stretched 720p composite, and correct scene/HUD proportions.
+- A minor exit-dialog offset remains cosmetic and does not affect use.
+- Grok's later `0.8.0` global HUD viewport/scissor remapping was reviewed and
+  rejected because it could also modify shadow, post-processing, mip, and
+  other non-HUD passes. It has been removed.
+
+### Current implementation
+
+- `0.9.0-lean-native-aspect` is built and directly installed.
+- Installed/source DLL SHA-256:
+  `9D0C0CCBC865A2BEF6D90E0F3F20445269EED62426C09F0EC1BA22E99911F9DE`.
+- Installed/source INI SHA-256:
+  `8C23C51981271609815570636B216C18A098CEDABD2F930A4B0F8417092E90B8`.
+- The game was not running during build/deployment.
+- The implementation retains only:
+  - the `dinput8.dll` proxy and `DirectInput8Create` forwarding;
+  - process/configuration/log handling;
+  - a minimal DX11 Present hook;
+  - setter-byte verification;
+  - the official aspect-mode-zero request and result log.
+- Obsolete camera tracing, projection upload tracing, resource expansion,
+  viewport/scissor rewriting, active-rectangle scans, pattern helpers, and
+  LGPL-derived runtime experiments were removed.
+- Source changes reduce the project by roughly 2,300 lines. The DLL decreased
+  from 286,208 bytes to 235,008 bytes.
+- The DLL export table was verified to contain only `DirectInput8Create`.
+
+### Required test
+
+- Launch DX11 and confirm the log contains:
+  - `Version 0.9.0-lean-native-aspect`;
+  - `DX11 Present hook: installed`;
+  - `Native aspect mode requested`;
+  - `Native aspect mode applied: mode=0, content=1280x800, output=1280x800`.
+- Visually confirm behavior matches the proven `0.7.6` build.
+- Never build or replace the DLL while the game is running.
+
 ## Latest handoff (2026-07-30 21:05 Asia/Shanghai)
 
 ### Immediate state
