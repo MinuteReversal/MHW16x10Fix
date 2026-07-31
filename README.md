@@ -1,8 +1,12 @@
 # MHW16x10Fix
 
-Removes the forced 16:9 letterbox from Monster Hunter: World / Iceborne,
-including the Steam Deck's native 1280x800 mode. Both DX11 and DX12 are
-supported.
+An aspect ratio fix and black bar remover for Monster Hunter: World /
+Iceborne. It removes the forced 16:9 letterbox (top and bottom black bars) and
+enables native 16:10 rendering, including the Steam Deck's 1280x800 display.
+Both DX11 and DX12 are supported.
+
+Useful search terms: MHW aspect ratio fix, remove black bars, letterbox remover,
+16:10 fix, 1280x800 fix, Steam Deck mod, widescreen fix, DX11, and DX12.
 
 ## How it works
 
