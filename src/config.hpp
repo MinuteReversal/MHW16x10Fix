@@ -15,6 +15,7 @@ struct Config {
     bool fix_hud{false};
     bool fix_cutscenes{false};
     bool experimental_expand_720p{false};
+    bool experimental_expand_scene_resources{false};
     bool experimental_patch_active_rect{false};
     bool experimental_patch_aspect_constant{false};
     bool enable_log{true};

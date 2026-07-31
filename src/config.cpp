@@ -67,6 +67,9 @@ Config Config::load(const std::filesystem::path& path) {
     result.experimental_expand_720p =
         read_bool(path, L"Fix", L"ExperimentalExpand720p",
                   result.experimental_expand_720p);
+    result.experimental_expand_scene_resources =
+        read_bool(path, L"Fix", L"ExperimentalExpandSceneResources",
+                  result.experimental_expand_scene_resources);
     result.experimental_patch_active_rect =
         read_bool(path, L"Fix", L"ExperimentalPatchActiveRect",
                   result.experimental_patch_active_rect);
