@@ -1,0 +1,55 @@
+name: Build and release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Configure
+        run: cmake --preset vs2022-x64
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Package mod
+        shell: pwsh
+        run: |
+          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "manual-${{ github.run_number }}" }
+          $packageName = "MHW16x10Fix-$version"
+          $packageDir = Join-Path $env:RUNNER_TEMP $packageName
+          New-Item -ItemType Directory -Path $packageDir | Out-Null
+          Copy-Item "build/Release/dinput8.dll" $packageDir
+          Copy-Item "config/mhw_16x10.ini" $packageDir
+          Copy-Item "README.md" $packageDir
+          Copy-Item "LICENSE" $packageDir
+          Compress-Archive -Path "$packageDir/*" -DestinationPath "$packageName.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MHW16x10Fix-${{ github.ref_name }}
+          path: MHW16x10Fix-*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MHW16x10Fix-*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
