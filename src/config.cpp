@@ -72,6 +72,9 @@ Config Config::load(const std::filesystem::path& path) {
     result.enable_log =
         read_bool(path, L"Debug", L"EnableLog", result.enable_log);
     result.chain_load = read_path(path, L"Loader", L"ChainLoad");
+    result.forward_chain_direct_input = read_bool(
+        path, L"Loader", L"ForwardDirectInput8Create",
+        result.forward_chain_direct_input);
 
     if (result.auto_detect_aspect) {
         const auto graphics_file = path.parent_path() / L"graphics_option.ini";

@@ -25,6 +25,7 @@ DWORD g_chain_error{};
 enum class ChainStatus {
     disabled,
     loaded_with_export,
+    loaded_with_export_forwarding_disabled,
     loaded_without_export,
     self_reference,
     file_not_found,
@@ -73,7 +74,8 @@ std::filesystem::path module_path(HMODULE module) {
 }
 
 void load_chain(HMODULE self, const std::filesystem::path& directory,
-                const std::filesystem::path& configured_path) {
+                const std::filesystem::path& configured_path,
+                bool forward_direct_input) {
     if (configured_path.empty()) {
         g_chain_status = ChainStatus::disabled;
         return;
@@ -103,17 +105,25 @@ void load_chain(HMODULE self, const std::filesystem::path& directory,
 
     const auto chained = reinterpret_cast<DirectInput8CreateFn>(
         GetProcAddress(g_chain_module, "DirectInput8Create"));
-    g_chain_direct_input8_create.store(
-        chained, std::memory_order_release);
-    g_chain_status = chained ? ChainStatus::loaded_with_export
-                             : ChainStatus::loaded_without_export;
+    if (!chained) {
+        g_chain_status = ChainStatus::loaded_without_export;
+        return;
+    }
+    if (!forward_direct_input) {
+        g_chain_status =
+            ChainStatus::loaded_with_export_forwarding_disabled;
+        return;
+    }
+    g_chain_direct_input8_create.store(chained, std::memory_order_release);
+    g_chain_status = ChainStatus::loaded_with_export;
 }
 
 void ensure_chain_loaded(HMODULE self,
                          const std::filesystem::path& directory,
-                         const std::filesystem::path& configured_path) {
+                         const std::filesystem::path& configured_path,
+                         bool forward_direct_input) {
     std::call_once(g_chain_load_once, load_chain, self, directory,
-                   configured_path);
+                   configured_path, forward_direct_input);
 }
 
 void ensure_chain_loaded_from_ini() {
@@ -132,9 +142,20 @@ void ensure_chain_loaded_from_ini() {
     const auto length = GetPrivateProfileStringW(
         L"Loader", L"ChainLoad", L"", value.data(),
         static_cast<DWORD>(value.size()), ini.c_str());
+    std::array<wchar_t, 32> forward_value{};
+    GetPrivateProfileStringW(
+        L"Loader", L"ForwardDirectInput8Create", L"true",
+        forward_value.data(), static_cast<DWORD>(forward_value.size()),
+        ini.c_str());
+    const auto forward_direct_input =
+        _wcsicmp(forward_value.data(), L"false") != 0 &&
+        _wcsicmp(forward_value.data(), L"off") != 0 &&
+        _wcsicmp(forward_value.data(), L"no") != 0 &&
+        _wcsicmp(forward_value.data(), L"0") != 0;
     ensure_chain_loaded(
         self, directory,
-        std::filesystem::path(std::wstring_view(value.data(), length)));
+        std::filesystem::path(std::wstring_view(value.data(), length)),
+        forward_direct_input);
 }
 
 }  // namespace
@@ -143,8 +164,10 @@ namespace mhw {
 
 void initialize_dinput8_proxy(
     HMODULE self, const std::filesystem::path& directory,
-    const std::filesystem::path& chain_load, Logger& log) {
-    ensure_chain_loaded(self, directory, chain_load);
+    const std::filesystem::path& chain_load,
+    bool forward_chain_direct_input, Logger& log) {
+    ensure_chain_loaded(self, directory, chain_load,
+                        forward_chain_direct_input);
     switch (g_chain_status) {
         case ChainStatus::disabled:
             log.write(L"Chain loader: disabled");
@@ -152,6 +175,11 @@ void initialize_dinput8_proxy(
         case ChainStatus::loaded_with_export:
             log.write(
                 L"Chain loader loaded: {}; DirectInput8Create forwarding=enabled",
+                g_chain_path.wstring());
+            break;
+        case ChainStatus::loaded_with_export_forwarding_disabled:
+            log.write(
+                L"Chain loader loaded: {}; DirectInput8Create forwarding=disabled; system forwarding retained",
                 g_chain_path.wstring());
             break;
         case ChainStatus::loaded_without_export:

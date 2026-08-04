@@ -28,13 +28,16 @@ textures manually, or globally rewrite viewports/scissors.
 - 1280x800
 - Windows and Steam Deck
 - Steam Deck play session exceeding one hour without a crash
+- SharpPluginLoader 0.0.9 on Windows and Steam Deck (DX12)
 
 Other 16:10 and ultrawide resolutions may work through the same native mode,
 but have not received the same validation.
 
 DX12 uses the same native engine setter and has been visually and internally
-validated on Windows at 1280x800. Extended DX12 stability testing on Steam
-Deck remains pending.
+validated on Windows and Steam Deck at 1280x800. SharpPluginLoader
+compatibility was also validated on both platforms. See the
+[SharpPluginLoader compatibility guide](docs/sharp-plugin-loader.md) for the
+required platform packages, Proton dependencies, and launch options.
 
 ## Build
 
@@ -58,6 +61,10 @@ On SteamOS, use:
 WINEDLLOVERRIDES="dinput8.dll=n,b" %command%
 ```
 
+When SharpPluginLoader is also installed on Steam Deck, use its Linux package
+and the separately documented launch option instead. See
+[SharpPluginLoader compatibility](docs/sharp-plugin-loader.md).
+
 The game directory can contain only one file named `dinput8.dll`. To use
 another proxy mod at the same time:
 
@@ -65,6 +72,14 @@ another proxy mod at the same time:
 2. Rename the other mod's proxy DLL to `dinput8_chain.dll`.
 3. Put both DLLs beside `MonsterHunterWorld.exe`.
 4. Set `ChainLoad=dinput8_chain.dll` in `mhw_16x10.ini`.
+
+Stracker's Loader must not receive forwarded `DirectInput8Create` calls after
+its proxy DLL is renamed, because its own forwarding path resolves back to the
+top-level `dinput8.dll`. For Stracker's Loader, also set:
+
+```ini
+ForwardDirectInput8Create=false
+```
 
 The configured path may also be absolute. Relative paths are resolved from the
 game directory.
@@ -81,6 +96,7 @@ RemoveLetterbox=true
 
 [Loader]
 ChainLoad=
+ForwardDirectInput8Create=true
 
 [Debug]
 EnableLog=true
@@ -90,14 +106,20 @@ With auto-detection enabled, the configured width and height are fallbacks.
 Logs are written to `MHW16x10Fix.log`.
 
 When chain loading is configured, the downstream DLL is loaded before the
-first DirectInput call is completed. If it exports `DirectInput8Create`, the
-call is forwarded to it; otherwise the DLL still receives its normal
-`DllMain` initialization and DirectInput calls continue to the Windows system
-DLL. The log records which case occurred. Self-loading is rejected.
+first DirectInput call is completed. With `ForwardDirectInput8Create=true`, a
+downstream `DirectInput8Create` export receives the call. With the option set
+to `false`, the downstream DLL still receives its normal `DllMain`
+initialization while DirectInput calls continue directly to the Windows system
+DLL. The latter setting avoids recursive forwarding with Stracker's Loader.
+The default remains `true` for compatibility with other proxy DLLs. The log
+records which case occurred. Self-loading is rejected.
+
+## Compatibility guides
+
+- [SharpPluginLoader on Windows and Steam Deck](docs/sharp-plugin-loader.md)
 
 ## Limitations
 
-- Extended DX12 stability testing on Steam Deck is still pending.
 - A small number of UI dialogs may retain 16:9-oriented positioning.
 - Only the listed executable build is supported; the setter bytes are checked
   at runtime and an unknown build fails closed.

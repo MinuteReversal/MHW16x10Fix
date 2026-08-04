@@ -11,6 +11,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <filesystem>
 
 namespace mhw {
 namespace {
@@ -37,7 +39,79 @@ CreateSwapChainForHwndFn g_original_create_swapchain_for_hwnd{};
 std::atomic<bool> g_request_attempted{false};
 std::atomic<bool> g_result_logged{false};
 std::atomic<bool> g_present_hook_installed{false};
+std::mutex g_present_hook_mutex;
 bool g_remove_letterbox{};
+
+void request_native_aspect_mode();
+void log_native_aspect_result();
+
+bool is_sharp_plugin_loader_active() {
+    wchar_t executable_path[32768]{};
+    const auto executable_length = GetModuleFileNameW(
+        nullptr, executable_path,
+        static_cast<DWORD>(std::size(executable_path)));
+    if (executable_length == 0 ||
+        executable_length == std::size(executable_path)) {
+        return false;
+    }
+
+    const auto game_directory =
+        std::filesystem::path(executable_path).parent_path();
+    const auto local_winmm = game_directory / L"winmm.dll";
+    const auto local_msvcrt = game_directory / L"msvcrt.dll";
+    const auto sharp_core = game_directory /
+        L"nativePC/plugins/CSharp/Loader/SharpPluginLoader.Core.dll";
+    std::error_code error;
+    const auto core_exists = std::filesystem::exists(sharp_core, error);
+    error.clear();
+    const auto windows_proxy_exists =
+        std::filesystem::exists(local_winmm, error);
+    error.clear();
+    const auto linux_proxy_exists =
+        std::filesystem::exists(local_msvcrt, error);
+    return core_exists && (windows_proxy_exists || linux_proxy_exists);
+}
+
+DWORD WINAPI native_aspect_worker(void*) {
+    // SharpPluginLoader creates its DX12 renderer well after the render-manager
+    // object first becomes visible. Wait for real output dimensions so the
+    // game's later renderer initialization cannot overwrite our request.
+    for (unsigned attempt = 0; attempt < 1200; ++attempt) {
+        const auto module =
+            reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        auto* manager = module
+                            ? *reinterpret_cast<void**>(
+                                  module + kRenderManagerGlobalRva)
+                            : nullptr;
+        if (!manager) {
+            Sleep(100);
+            continue;
+        }
+        const auto address = reinterpret_cast<std::uintptr_t>(manager);
+        const auto output = *reinterpret_cast<const std::uint64_t*>(
+            address + kOutputDimensionsOffset);
+        if (static_cast<std::uint32_t>(output) == 0 ||
+            static_cast<std::uint32_t>(output >> 32) == 0) {
+            Sleep(100);
+            continue;
+        }
+
+        const auto requested = *reinterpret_cast<const std::int32_t*>(
+            address + kRequestedModeOffset);
+        if (requested != 0) {
+            // Renderer initialization and some loader startup stages can
+            // restore the forced 16:9 mode. Re-arm the one-shot setter only
+            // when that state actually changes back.
+            g_request_attempted.store(false, std::memory_order_release);
+            g_result_logged.store(false, std::memory_order_release);
+            request_native_aspect_mode();
+            log_native_aspect_result();
+        }
+        Sleep(100);
+    }
+    Logger::instance().write(L"Native aspect startup monitor completed");
+    return 0;
+}
 
 bool replace_vtable_entry(void** entry, void* replacement, void** original) {
     DWORD old_protection{};
@@ -161,8 +235,16 @@ void log_native_aspect_result() {
 
 HRESULT STDMETHODCALLTYPE present_hook(IDXGISwapChain* swapchain,
                                        UINT sync_interval, UINT flags) {
-    request_native_aspect_mode();
-    log_native_aspect_result();
+    // Updating the game's aspect state can cause a nested Present when
+    // another loader also hooks DX12 presentation. Avoid recursively applying
+    // the game-side update; the nested call can continue to the original.
+    thread_local bool applying_native_aspect = false;
+    if (!applying_native_aspect) {
+        applying_native_aspect = true;
+        request_native_aspect_mode();
+        log_native_aspect_result();
+        applying_native_aspect = false;
+    }
     return g_original_present(swapchain, sync_interval, flags);
 }
 
@@ -170,14 +252,22 @@ bool hook_swapchain_present(IDXGISwapChain* swapchain) {
     if (!swapchain) {
         return false;
     }
+
+    const std::scoped_lock lock(g_present_hook_mutex);
     if (g_present_hook_installed.load(std::memory_order_acquire)) {
         return true;
     }
 
     auto** vtable = *reinterpret_cast<void***>(swapchain);
+    if (vtable[8] == reinterpret_cast<void*>(&present_hook)) {
+        return g_original_present != nullptr;
+    }
     void* original{};
     if (!replace_vtable_entry(&vtable[8], reinterpret_cast<void*>(&present_hook),
                               &original)) {
+        return false;
+    }
+    if (original == reinterpret_cast<void*>(&present_hook)) {
         return false;
     }
     g_original_present = reinterpret_cast<PresentFn>(original);
@@ -308,6 +398,19 @@ bool install_native_aspect_fix(Logger& log, const Config& config) {
     g_remove_letterbox = config.remove_letterbox;
 
     if (config.game_dx12) {
+        if (is_sharp_plugin_loader_active()) {
+            log.write(L"SharpPluginLoader detected; using the DX12 "
+                      L"native-aspect worker instead of a Present hook");
+            const auto thread = CreateThread(
+                nullptr, 0, native_aspect_worker, nullptr, 0, nullptr);
+            if (!thread) {
+                log.write(L"Native aspect worker creation failed: {}",
+                          GetLastError());
+                return false;
+            }
+            CloseHandle(thread);
+            return true;
+        }
         return install_dx12_swapchain_capture(log);
     }
 

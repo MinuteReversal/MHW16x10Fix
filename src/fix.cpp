@@ -49,7 +49,8 @@ void initialize_fix(HMODULE self) {
             return;
         }
         initialize_dinput8_proxy(
-            self, directory, config.chain_load, log);
+            self, directory, config.chain_load,
+            config.forward_chain_direct_input, log);
         if (!config.enabled) {
             log.write(L"Disabled in configuration");
             return;

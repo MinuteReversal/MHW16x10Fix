@@ -12,6 +12,7 @@ struct Config {
     bool remove_letterbox{true};
     bool enable_log{true};
     std::filesystem::path chain_load{};
+    bool forward_chain_direct_input{true};
     bool resolution_detected{false};
     bool game_dx12{false};
 
