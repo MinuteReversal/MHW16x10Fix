@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # The project preset explicitly targets Visual Studio 2022.
+    runs-on: windows-2022
 
     steps:
       - name: Check out source
