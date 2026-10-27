@@ -14,7 +14,7 @@ namespace mhw {
 
 inline constexpr std::wstring_view kName = L"MHW16x10Fix";
 inline constexpr std::wstring_view kVersion =
-    L"0.11.10-linux-sharp-detect";
+    L"0.11.12-ui-16x9";
 
 std::filesystem::path module_directory(HMODULE module);
 
