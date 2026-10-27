@@ -19,7 +19,9 @@ ChainLoad=
 ForwardDirectInput8Create=true
 ```
 
-`ForwardDirectInput8Create` has no effect while `ChainLoad` is empty.
+An empty `ChainLoad` still loads `dinput8_chain.dll` when that file is
+present. `ForwardDirectInput8Create` applies to that automatic file, except
+that a Stracker or ICE proxy never receives the forwarded call.
 
 MHW16x10Fix detects SharpPluginLoader's Windows or Linux package. On DX12 it
 then avoids installing its Present hook, because SharpPluginLoader also hooks

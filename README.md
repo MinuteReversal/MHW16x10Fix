@@ -71,15 +71,20 @@ another proxy mod at the same time:
 1. Keep this project's DLL named `dinput8.dll`.
 2. Rename the other mod's proxy DLL to `dinput8_chain.dll`.
 3. Put both DLLs beside `MonsterHunterWorld.exe`.
-4. Set `ChainLoad=dinput8_chain.dll` in `mhw_16x10.ini`.
 
-Stracker's Loader must not receive forwarded `DirectInput8Create` calls after
-its proxy DLL is renamed, because its own forwarding path resolves back to the
-top-level `dinput8.dll`. For Stracker's Loader, also set:
+An empty `ChainLoad` loads `dinput8_chain.dll` when that file is present.
+ICE and Stracker's Loader both ship that kind of proxy. Their plugin DLLs
+(including Custom FOV) start from the chained loader's `DllMain`. Leave
+`cryptbase.dll`, `loader.dll`, `ice_managed_code.dll`, and the `ICE` folder
+in place. This mod loads a game-directory `cryptbase.dll` itself so ICE keeps
+using `SAVEDATA_ICE`.
 
-```ini
-ForwardDirectInput8Create=false
-```
+Stracker's Loader and the ICE copy of it must not receive forwarded
+`DirectInput8Create` calls after the proxy is renamed, because they resolve
+`dinput8.dll` by name and would call this mod again. That forwarding is
+turned off automatically when the chained file contains that name. For any
+other chained proxy, `ForwardDirectInput8Create=true` still forwards the
+export. Set `ChainLoad=-` to disable the automatic file.
 
 The configured path may also be absolute. Relative paths are resolved from the
 game directory.
@@ -105,14 +110,14 @@ EnableLog=true
 With auto-detection enabled, the configured width and height are fallbacks.
 Logs are written to `MHW16x10Fix.log`.
 
-When chain loading is configured, the downstream DLL is loaded before the
-first DirectInput call is completed. With `ForwardDirectInput8Create=true`, a
-downstream `DirectInput8Create` export receives the call. With the option set
-to `false`, the downstream DLL still receives its normal `DllMain`
-initialization while DirectInput calls continue directly to the Windows system
-DLL. The latter setting avoids recursive forwarding with Stracker's Loader.
-The default remains `true` for compatibility with other proxy DLLs. The log
-records which case occurred. Self-loading is rejected.
+When `dinput8_chain.dll` is present, or `ChainLoad` names another DLL, the
+downstream DLL is loaded before the first DirectInput call is completed.
+With `ForwardDirectInput8Create=true`, a downstream `DirectInput8Create`
+export receives the call, except for a Stracker or ICE proxy that resolves
+`dinput8.dll` by name. In that case the downstream DLL still receives its
+normal `DllMain` initialization while DirectInput calls continue directly to
+the Windows system DLL. The log records which case occurred. Self-loading is
+rejected. A game-directory `cryptbase.dll` is loaded either way.
 
 ## Compatibility guides
 

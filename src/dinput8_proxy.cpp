@@ -6,7 +6,9 @@
 
 #include <array>
 #include <atomic>
+#include <fstream>
 #include <mutex>
+#include <string>
 
 namespace {
 
@@ -73,17 +75,70 @@ std::filesystem::path module_path(HMODULE module) {
         std::wstring_view(path.data(), length));
 }
 
+bool file_contains_ascii(const std::filesystem::path& path,
+                         std::string_view needle) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return false;
+    }
+    const std::string data(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    return data.find(needle) != std::string::npos;
+}
+
+// Stracker's Loader and the ICE copy of it call LoadLibrary("dinput8.dll")
+// from their own DirectInput8Create. Forwarding that call returns to this
+// proxy and recurses, so those DLLs are initialized through DllMain only.
+bool resolves_top_level_dinput8(const std::filesystem::path& path) {
+    return file_contains_ascii(path, "dinput8.dll");
+}
+
+void load_game_cryptbase(const std::filesystem::path& directory) {
+    const auto path = directory / L"cryptbase.dll";
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) {
+        return;
+    }
+    const auto module = LoadLibraryW(path.c_str());
+    if (module) {
+        mhw::Logger::instance().write(L"ICE cryptbase loaded: {}",
+                                       path.wstring());
+        return;
+    }
+    mhw::Logger::instance().write(
+        L"ICE cryptbase failed: {} (Win32 error {})", path.wstring(),
+        GetLastError());
+}
+
 void load_chain(HMODULE self, const std::filesystem::path& directory,
                 const std::filesystem::path& configured_path,
                 bool forward_direct_input) {
-    if (configured_path.empty()) {
+    struct CryptbaseOnExit {
+        const std::filesystem::path& directory;
+        ~CryptbaseOnExit() { load_game_cryptbase(directory); }
+    } cryptbase_on_exit{directory};
+
+    auto requested = configured_path;
+    if (requested == L"-" || requested == L"none") {
         g_chain_status = ChainStatus::disabled;
         return;
     }
+    if (requested.empty()) {
+        const auto automatic = directory / L"dinput8_chain.dll";
+        std::error_code error;
+        if (std::filesystem::is_regular_file(automatic, error)) {
+            requested = automatic;
+            mhw::Logger::instance().write(
+                L"Chain loader auto-selected dinput8_chain.dll");
+        } else {
+            g_chain_status = ChainStatus::disabled;
+            return;
+        }
+    }
 
-    g_chain_path = configured_path.is_absolute()
-                       ? configured_path
-                       : directory / configured_path;
+    g_chain_path = requested.is_absolute() ? requested
+                                            : directory / requested;
     const auto self_path = module_path(self);
     if (self_path.empty() || same_file(g_chain_path, self_path)) {
         g_chain_status = ChainStatus::self_reference;
@@ -105,6 +160,13 @@ void load_chain(HMODULE self, const std::filesystem::path& directory,
 
     const auto chained = reinterpret_cast<DirectInput8CreateFn>(
         GetProcAddress(g_chain_module, "DirectInput8Create"));
+    const auto stracker_style = resolves_top_level_dinput8(g_chain_path);
+    if (stracker_style && forward_direct_input) {
+        mhw::Logger::instance().write(
+            L"Chain loader kept DirectInput8Create on the system DLL; {} resolves dinput8.dll by name",
+            g_chain_path.wstring());
+        forward_direct_input = false;
+    }
     if (!chained) {
         g_chain_status = ChainStatus::loaded_without_export;
         return;
